@@ -10,8 +10,12 @@ export CLANG_MODULE_CACHE_PATH="$BUILD_ROOT/module-cache/clang"
 export SWIFT_MODULECACHE_PATH="$BUILD_ROOT/module-cache/swift"
 
 mkdir -p "$CLANG_MODULE_CACHE_PATH" "$SWIFT_MODULECACHE_PATH"
-swift build --package-path "$PROJECT_ROOT" -c release --product VocabPocket
-BIN_PATH="$(swift build --package-path "$PROJECT_ROOT" -c release --show-bin-path)"
+BUILD_OPTIONS=(--package-path "$PROJECT_ROOT" -c release --product VocabPocket)
+if [[ "${VOCABPOCKET_UNIVERSAL:-0}" == "1" ]]; then
+    BUILD_OPTIONS+=(--arch arm64 --arch x86_64)
+fi
+swift build "${BUILD_OPTIONS[@]}"
+BIN_PATH="$(swift build "${BUILD_OPTIONS[@]}" --show-bin-path)"
 
 if [[ -d "$APP_PATH" ]]; then
     rm -rf "$APP_PATH"

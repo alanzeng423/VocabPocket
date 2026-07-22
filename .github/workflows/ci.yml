@@ -22,7 +22,7 @@ jobs:
         run: swift test
 
       - name: Build app bundle
-        run: ./scripts/build-app.sh
+        run: VOCABPOCKET_UNIVERSAL=1 ./scripts/build-app.sh
 
       - name: Archive app
         run: ditto -c -k --keepParent .build/VocabPocket.app .build/VocabPocket-unsigned.zip

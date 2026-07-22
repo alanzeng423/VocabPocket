@@ -49,6 +49,12 @@ swift test
 open .build/VocabPocket.app
 ```
 
+默认构建当前 Mac 架构；发布用 Universal（Apple Silicon + Intel）版本：
+
+```bash
+VOCABPOCKET_UNIVERSAL=1 ./scripts/build-app.sh
+```
+
 Swift Package 也可以直接用 Xcode 打开：
 
 ```bash
