@@ -187,7 +187,7 @@ extension TranslationAPIClient {
 
     private func mTranCode(for identifier: String, useBCP47: Bool) -> String {
         guard useBCP47 else { return baseLanguageCode(identifier) }
-        switch identifier {
+        return switch identifier {
         case "zh", "zh-Hans", "zh-CN", "zh-SG": "zh-Hans"
         case "zh-Hant", "zh-TW", "zh-HK", "zh-MO": "zh-Hant"
         default: identifier
@@ -196,7 +196,7 @@ extension TranslationAPIClient {
 
     private func nllbCode(for identifier: String) -> String {
         if ["zh-Hant", "zh-TW", "zh-HK", "zh-MO"].contains(identifier) { return "zho_Hant" }
-        switch baseLanguageCode(identifier) {
+        return switch baseLanguageCode(identifier) {
         case "en": "eng_Latn"
         case "zh": "zho_Hans"
         case "ja": "jpn_Jpan"
