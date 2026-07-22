@@ -130,11 +130,7 @@ struct OCRService {
     }
 
     private static func supportedLanguageHints(for request: VNRecognizeTextRequest) -> [String] {
-        let supported =
-            (try? VNRecognizeTextRequest.supportedRecognitionLanguages(
-                for: .accurate,
-                revision: request.revision
-            )) ?? []
+        let supported = (try? request.supportedRecognitionLanguages()) ?? []
         guard !supported.isEmpty else { return [] }
 
         let desired =

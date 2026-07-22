@@ -14,10 +14,10 @@ enum KeychainStoreError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unexpectedData:
-            "钥匙串中的密钥格式无效"
+            return "钥匙串中的密钥格式无效"
         case .operationFailed(let status):
             let reason = SecCopyErrorMessageString(status, nil) as String? ?? "状态码 \(status)"
-            "无法访问 macOS 钥匙串：\(reason)"
+            return "无法访问 macOS 钥匙串：\(reason)"
         }
     }
 }

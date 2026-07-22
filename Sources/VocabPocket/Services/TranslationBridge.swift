@@ -33,14 +33,14 @@ struct TranslationBridge: View {
                 else { return }
                 do {
                     let response = try await session.translate(request.sourceText)
-                    await model.completeTranslation(
+                    model.completeTranslation(
                         requestID: request.id,
                         translatedText: response.targetText,
                         sourceLanguageIdentifier: response.sourceLanguage.minimalIdentifier,
                         targetLanguageIdentifier: response.targetLanguage.minimalIdentifier
                     )
                 } catch {
-                    await model.translationFailed(requestID: request.id, error: error)
+                    model.translationFailed(requestID: request.id, error: error)
                 }
             }
     }
