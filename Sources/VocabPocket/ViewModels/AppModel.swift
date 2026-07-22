@@ -7,6 +7,7 @@ struct PendingTranslation: Identifiable, Equatable {
     let sourceText: String
     let targetLanguageIdentifier: String
     let captureMethod: CaptureMethod
+    let provider: TranslationProviderKind
 }
 
 struct TranslationPopupState: Equatable {
@@ -47,6 +48,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var popup: TranslationPopupState = .idle
     @Published private(set) var pendingTranslation: PendingTranslation?
     @Published private(set) var hotKeyError: String?
+    @Published private(set) var providerTestMessage: String?
+    @Published private(set) var isTestingProvider = false
 
     let settings: AppSettings
     let store: VocabularyStore
@@ -55,7 +58,9 @@ final class AppModel: ObservableObject {
     private let screenCaptureService: ScreenCaptureService
     private let ocrService: OCRService
     private let hotKeyManager: HotKeyManager
+    private let translationClient: TranslationAPIClient
     private var captureTask: Task<Void, Never>?
+    private var externalTranslationTask: Task<Void, Never>?
     private var dismissTask: Task<Void, Never>?
     private var hasStarted = false
     private var captureInProgress = false
@@ -66,7 +71,8 @@ final class AppModel: ObservableObject {
         selectionReader: SelectionReader? = nil,
         screenCaptureService: ScreenCaptureService? = nil,
         ocrService: OCRService = OCRService(),
-        hotKeyManager: HotKeyManager? = nil
+        hotKeyManager: HotKeyManager? = nil,
+        translationClient: TranslationAPIClient = TranslationAPIClient()
     ) {
         self.settings = settings ?? AppSettings()
         self.store = store ?? VocabularyStore()
@@ -74,6 +80,7 @@ final class AppModel: ObservableObject {
         self.screenCaptureService = screenCaptureService ?? ScreenCaptureService()
         self.ocrService = ocrService
         self.hotKeyManager = hotKeyManager ?? HotKeyManager()
+        self.translationClient = translationClient
     }
 
     func start() {
@@ -93,6 +100,7 @@ final class AppModel: ObservableObject {
 
     func stop() {
         captureTask?.cancel()
+        externalTranslationTask?.cancel()
         dismissTask?.cancel()
         hotKeyManager.unregister()
     }
@@ -131,6 +139,7 @@ final class AppModel: ObservableObject {
     ) {
         guard let request = pendingTranslation, request.id == requestID else { return }
         pendingTranslation = nil
+        externalTranslationTask = nil
 
         let entry: VocabularyEntry?
         if settings.autoSave {
@@ -161,6 +170,7 @@ final class AppModel: ObservableObject {
     func translationFailed(requestID: UUID, error: Error) {
         guard pendingTranslation?.id == requestID else { return }
         pendingTranslation = nil
+        externalTranslationTask = nil
         showFailure("翻译失败：\(error.localizedDescription)")
     }
 
@@ -198,7 +208,40 @@ final class AppModel: ObservableObject {
 
     func dismissPopup() {
         dismissTask?.cancel()
+        if pendingTranslation != nil {
+            externalTranslationTask?.cancel()
+            externalTranslationTask = nil
+            pendingTranslation = nil
+        }
         popup = .idle
+    }
+
+    func testSelectedTranslationProvider() async {
+        let provider = settings.translationProvider
+        guard provider.usesRemoteService else {
+            providerTestMessage = "Apple Translation 无需 API 配置，请直接使用快捷翻译测试。"
+            return
+        }
+
+        isTestingProvider = true
+        providerTestMessage = nil
+        defer { isTestingProvider = false }
+
+        do {
+            let configuration = try settings.configuration(for: provider)
+            let result = try await translationClient.translate(
+                text: "Hello, world!",
+                targetLanguageIdentifier: settings.targetLanguage.rawValue,
+                configuration: configuration
+            )
+            providerTestMessage = "连接成功：\(result.translatedText)"
+        } catch {
+            providerTestMessage = "测试失败：\(error.localizedDescription)"
+        }
+    }
+
+    func clearProviderTestMessage() {
+        providerTestMessage = nil
     }
 
     private func performCapture(mode: CaptureMode) async {
@@ -260,17 +303,51 @@ final class AppModel: ObservableObject {
             id: UUID(),
             sourceText: String(cleaned.prefix(8_000)),
             targetLanguageIdentifier: settings.targetLanguage.rawValue,
-            captureMethod: captureMethod
+            captureMethod: captureMethod,
+            provider: settings.translationProvider
         )
         pendingTranslation = request
         popup = .progress(
             .translating,
-            message: "正在进行设备端翻译…",
+            message: request.provider.progressMessage,
             sourceText: request.sourceText
         )
+
+        if request.provider.usesRemoteService {
+            translateUsingExternalProvider(request)
+        }
+    }
+
+    private func translateUsingExternalProvider(_ request: PendingTranslation) {
+        externalTranslationTask?.cancel()
+        externalTranslationTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let configuration = try self.settings.configuration(for: request.provider)
+                let result = try await self.translationClient.translate(
+                    text: request.sourceText,
+                    targetLanguageIdentifier: request.targetLanguageIdentifier,
+                    configuration: configuration
+                )
+                guard !Task.isCancelled else { return }
+                self.completeTranslation(
+                    requestID: request.id,
+                    translatedText: result.translatedText,
+                    sourceLanguageIdentifier: result.sourceLanguageIdentifier,
+                    targetLanguageIdentifier: result.targetLanguageIdentifier
+                )
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.translationFailed(requestID: request.id, error: error)
+            }
+        }
     }
 
     private func showFailure(_ message: String) {
+        externalTranslationTask?.cancel()
+        externalTranslationTask = nil
         pendingTranslation = nil
         popup = .failure(message)
         scheduleDismiss(after: 10)

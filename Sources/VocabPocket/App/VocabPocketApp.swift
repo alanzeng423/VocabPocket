@@ -22,7 +22,7 @@ struct VocabPocketApp: App {
 
         Settings {
             SettingsView(model: model)
-                .frame(width: 520, height: 430)
+                .frame(width: 640, height: 700)
         }
     }
 }

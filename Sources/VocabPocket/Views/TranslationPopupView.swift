@@ -108,7 +108,7 @@ struct TranslationPopupView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer()
-            Text("可在 VocabPocket 设置中检查系统权限与快捷键。")
+            Text("可在 VocabPocket 设置中检查系统权限、快捷键与翻译引擎配置。")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
@@ -138,7 +138,7 @@ struct TranslationPopupView: View {
         case .preparingScreenshot: "截图取词"
         case .recognizing: "OCR 识别"
         case .readingSelection: "读取选区"
-        case .translating: "设备端翻译"
+        case .translating: model.pendingTranslation?.provider.title ?? "翻译中"
         case .idle: "VocabPocket"
         }
     }

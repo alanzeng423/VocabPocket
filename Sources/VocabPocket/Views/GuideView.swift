@@ -13,7 +13,7 @@ struct GuideView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("三步开始积累生词")
                         .font(.largeTitle.bold())
-                    Text("翻译和 OCR 均由 macOS 在设备端完成。")
+                    Text("OCR 始终在设备端完成；翻译可使用 Apple、本地 LLM 或你自己的 API。")
                         .foregroundStyle(.secondary)
                 }
 
@@ -44,6 +44,28 @@ struct GuideView: View {
                             actionTitle: "请求权限"
                         ) {
                             screenCaptureGranted = ScreenCaptureService.requestScreenCaptureAccess()
+                        }
+                    }
+                    .padding(8)
+                }
+
+                GroupBox("翻译引擎") {
+                    HStack(spacing: 12) {
+                        Image(
+                            systemName: model.settings.translationProvider.usesRemoteService ? "network" : "lock.shield"
+                        )
+                        .font(.title2)
+                        .foregroundStyle(Color.accentColor)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(model.settings.translationProvider.title)
+                                .font(.headline)
+                            Text(model.settings.translationProvider.detail)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        SettingsLink {
+                            Text("配置")
                         }
                     }
                     .padding(8)

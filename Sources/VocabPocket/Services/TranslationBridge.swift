@@ -12,7 +12,11 @@ struct TranslationBridge: View {
         Color.clear
             .frame(width: 1, height: 1)
             .onChange(of: model.pendingTranslation?.id) { _, requestID in
-                guard requestID != nil, let request = model.pendingTranslation else { return }
+                guard
+                    requestID != nil,
+                    let request = model.pendingTranslation,
+                    request.provider == .apple
+                else { return }
                 let target = Locale.Language(identifier: request.targetLanguageIdentifier)
 
                 if var current = configuration, current.target == target {
@@ -23,7 +27,10 @@ struct TranslationBridge: View {
                 }
             }
             .translationTask(configuration) { session in
-                guard let request = model.pendingTranslation else { return }
+                guard
+                    let request = model.pendingTranslation,
+                    request.provider == .apple
+                else { return }
                 do {
                     let response = try await session.translate(request.sourceText)
                     await model.completeTranslation(

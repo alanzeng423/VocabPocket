@@ -19,9 +19,9 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>0.2.0</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>2</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.productivity</string>
     <key>LSMinimumSystemVersion</key>
@@ -32,6 +32,13 @@
     <string>VocabPocket 需要读取你主动选中的文字，以便执行快捷翻译。</string>
     <key>NSScreenCaptureUsageDescription</key>
     <string>VocabPocket 仅识别你主动框选的屏幕区域，并在识别后删除临时截图。</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>VocabPocket 需要连接你主动配置的 Ollama、LM Studio 或其他本地翻译服务。</string>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSHumanReadableCopyright</key>
