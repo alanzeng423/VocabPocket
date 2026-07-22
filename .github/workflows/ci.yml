@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Show toolchain
+        run: swift --version
+
+      - name: Run tests
+        run: swift test
+
+      - name: Build app bundle
+        run: ./scripts/build-app.sh
+
+      - name: Archive app
+        run: ditto -c -k --keepParent .build/VocabPocket.app .build/VocabPocket-unsigned.zip
+
+      - name: Upload unsigned app
+        uses: actions/upload-artifact@v7
+        with:
+          name: VocabPocket-unsigned
+          path: .build/VocabPocket-unsigned.zip
+          if-no-files-found: error
