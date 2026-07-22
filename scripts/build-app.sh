@@ -10,12 +10,23 @@ export CLANG_MODULE_CACHE_PATH="$BUILD_ROOT/module-cache/clang"
 export SWIFT_MODULECACHE_PATH="$BUILD_ROOT/module-cache/swift"
 
 mkdir -p "$CLANG_MODULE_CACHE_PATH" "$SWIFT_MODULECACHE_PATH"
-BUILD_OPTIONS=(--package-path "$PROJECT_ROOT" -c release --product VocabPocket)
 if [[ "${VOCABPOCKET_UNIVERSAL:-0}" == "1" ]]; then
-    BUILD_OPTIONS+=(--arch arm64 --arch x86_64)
+    ARM_SCRATCH="$BUILD_ROOT/arm64"
+    INTEL_SCRATCH="$BUILD_ROOT/x86_64"
+    UNIVERSAL_BIN="$BUILD_ROOT/universal-bin"
+
+    swift build --package-path "$PROJECT_ROOT" --scratch-path "$ARM_SCRATCH" -c release --product VocabPocket --arch arm64
+    swift build --package-path "$PROJECT_ROOT" --scratch-path "$INTEL_SCRATCH" -c release --product VocabPocket --arch x86_64
+    ARM_BIN_PATH="$(swift build --package-path "$PROJECT_ROOT" --scratch-path "$ARM_SCRATCH" -c release --arch arm64 --show-bin-path)"
+    INTEL_BIN_PATH="$(swift build --package-path "$PROJECT_ROOT" --scratch-path "$INTEL_SCRATCH" -c release --arch x86_64 --show-bin-path)"
+
+    mkdir -p "$UNIVERSAL_BIN"
+    lipo -create "$ARM_BIN_PATH/VocabPocket" "$INTEL_BIN_PATH/VocabPocket" -output "$UNIVERSAL_BIN/VocabPocket"
+    BIN_PATH="$UNIVERSAL_BIN"
+else
+    swift build --package-path "$PROJECT_ROOT" -c release --product VocabPocket
+    BIN_PATH="$(swift build --package-path "$PROJECT_ROOT" -c release --show-bin-path)"
 fi
-swift build "${BUILD_OPTIONS[@]}"
-BIN_PATH="$(swift build "${BUILD_OPTIONS[@]}" --show-bin-path)"
 
 if [[ -d "$APP_PATH" ]]; then
     rm -rf "$APP_PATH"
