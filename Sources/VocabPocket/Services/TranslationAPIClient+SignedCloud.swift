@@ -28,7 +28,7 @@ extension TranslationAPIClient {
         let stringToSign = "POST&%2F&\(rfc3986Encode(canonical))"
         parameters["Signature"] = hmacSHA1(key: credentials[1] + "&", message: stringToSign).base64EncodedString()
 
-        let url = try endpointURL(configuration.endpoint)
+        let url = try aliyunEndpointURL(configuration)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 45
@@ -292,6 +292,22 @@ extension TranslationAPIClient {
         formatter.timeZone = TimeZone(secondsFromGMT: 0)
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(timestamp)))
+    }
+
+    private func aliyunEndpointURL(_ configuration: TranslationProviderConfiguration) throws -> URL {
+        let endpoint = try endpointURL(configuration.endpoint)
+        let region = configuration.region.trimmingCharacters(in: .whitespacesAndNewlines)
+        let defaultEndpoint = TranslationProviderPreferences.defaults(for: .aliyun).endpoint
+        guard
+            !region.isEmpty,
+            configuration.endpoint == defaultEndpoint,
+            var components = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)
+        else {
+            return endpoint
+        }
+        components.host = "mt.\(region).aliyuncs.com"
+        guard let value = components.url else { throw TranslationProviderError.invalidEndpoint }
+        return value
     }
 
     private func aliyunLanguageCode(for identifier: String) -> String {

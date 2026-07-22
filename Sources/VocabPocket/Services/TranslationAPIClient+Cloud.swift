@@ -42,7 +42,8 @@ extension TranslationAPIClient {
         let secret = parts[1]
         let salt = String(Int(Date().timeIntervalSince1970 * 1_000))
         let isField = configuration.provider == .baiduField
-        let domain = configuration.region.trimmingCharacters(in: .whitespacesAndNewlines)
+        let domainValue = configuration.region.trimmingCharacters(in: .whitespacesAndNewlines)
+        let domain = domainValue.isEmpty ? "electronics" : domainValue
         let signInput =
             isField
             ? appID + text + salt + domain + secret
@@ -55,7 +56,7 @@ extension TranslationAPIClient {
             "salt": salt,
             "sign": md5Hex(signInput),
         ]
-        if isField { parameters["domain"] = domain.isEmpty ? "electronics" : domain }
+        if isField { parameters["domain"] = domain }
 
         let url = try endpointURL(configuration.endpoint)
         var request = URLRequest(url: url)
@@ -212,7 +213,8 @@ extension TranslationAPIClient {
         configuration: TranslationProviderConfiguration
     ) async throws -> ProviderTranslationResult {
         let url = try endpointURL(configuration.endpoint)
-        let source = caiyunLanguageCode(for: detectedLanguageIdentifier(for: text))
+        let detected = detectedLanguageIdentifier(for: text)
+        let source = detected == "und" ? "auto" : caiyunLanguageCode(for: detected)
         let targetCode = caiyunLanguageCode(for: target)
         var request = baseRequest(url: url)
         request.setValue("token \(configuration.apiKey)", forHTTPHeaderField: "x-authorization")
@@ -286,8 +288,11 @@ extension TranslationAPIClient {
     }
 
     private func truncatedYoudaoInput(_ value: String) -> String {
-        guard value.count > 20 else { return value }
-        return String(value.prefix(10)) + String(value.count) + String(value.suffix(10))
+        let utf16Value = value as NSString
+        guard utf16Value.length > 20 else { return value }
+        return
+            utf16Value.substring(to: 10) + String(utf16Value.length)
+            + utf16Value.substring(from: utf16Value.length - 10)
     }
 
     private func baiduLanguageCode(for identifier: String) -> String {

@@ -222,6 +222,32 @@ final class TranslationAPIClientTests: XCTestCase {
         XCTAssertEqual(result.sourceLanguageIdentifier, "en")
     }
 
+    func testNLLBServeMapsTargetToFloresCode() async throws {
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.url?.path, "/translate")
+            let body = try Self.bodyData(from: request)
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            XCTAssertEqual(json["tgt_lang"] as? String, "zho_Hans")
+            return try Self.response(for: request, json: #"{"translation":["NLLB 译文"]}"#)
+        }
+
+        let configuration = TranslationProviderConfiguration(
+            provider: .nllb,
+            endpoint: "http://localhost:6060",
+            apiKey: "",
+            model: "nllb-serve",
+            systemPrompt: "",
+            region: ""
+        )
+        let result = try await client.translate(
+            text: "hello world",
+            targetLanguageIdentifier: "zh-Hans",
+            configuration: configuration
+        )
+
+        XCTAssertEqual(result.translatedText, "NLLB 译文")
+    }
+
     func testGeminiBuildsGenerateContentRequest() async throws {
         MockURLProtocol.requestHandler = { request in
             XCTAssertEqual(request.url?.path, "/v1beta/models/gemini-test:generateContent")
@@ -317,6 +343,39 @@ final class TranslationAPIClientTests: XCTestCase {
         XCTAssertEqual(result.sourceLanguageIdentifier, "en")
     }
 
+    func testYoudaoCloudUsesV3Signature() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let parameters = try Self.formParameters(from: request)
+            XCTAssertEqual(parameters["appKey"], "app-id")
+            XCTAssertEqual(parameters["signType"], "v3")
+            XCTAssertEqual(parameters["from"], "auto")
+            XCTAssertEqual(parameters["to"], "zh-CHS")
+            XCTAssertEqual(parameters["sign"]?.count, 64)
+            return try Self.response(
+                for: request,
+                json: #"{"errorCode":"0","translation":["有道译文"],"l":"en2zh-CHS"}"#
+            )
+        }
+
+        var configuration = configuration(provider: .youdaoCloud)
+        configuration = TranslationProviderConfiguration(
+            provider: .youdaoCloud,
+            endpoint: configuration.endpoint,
+            apiKey: "app-id#app-secret",
+            model: "",
+            systemPrompt: "",
+            region: "general"
+        )
+        let result = try await client.translate(
+            text: "hello",
+            targetLanguageIdentifier: "zh-Hans",
+            configuration: configuration
+        )
+
+        XCTAssertEqual(result.translatedText, "有道译文")
+        XCTAssertEqual(result.sourceLanguageIdentifier, "en")
+    }
+
     func testTencentCloudUsesV3SignatureHeaders() async throws {
         MockURLProtocol.requestHandler = { request in
             XCTAssertEqual(request.value(forHTTPHeaderField: "X-TC-Action"), "TextTranslate")
@@ -378,6 +437,43 @@ final class TranslationAPIClientTests: XCTestCase {
         )
 
         XCTAssertEqual(result.translatedText, "火山译文")
+    }
+
+    func testIFlytekUsesDigestAndHMACHeaders() async throws {
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertTrue(request.value(forHTTPHeaderField: "Digest")?.hasPrefix("SHA-256=") == true)
+            XCTAssertTrue(
+                request.value(forHTTPHeaderField: "Authorization")?.contains("algorithm=\"hmac-sha256\"")
+                    == true
+            )
+            let body = try Self.bodyData(from: request)
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            let business = try XCTUnwrap(json["business"] as? [String: Any])
+            XCTAssertEqual(business["to"] as? String, "cn")
+            return try Self.response(
+                for: request,
+                json:
+                    #"{"code":0,"message":"success","data":{"result":{"from":"en","to":"cn","trans_result":{"dst":"讯飞译文","src":"hello"}}}}"#
+            )
+        }
+
+        var configuration = configuration(provider: .iFlytek)
+        configuration = TranslationProviderConfiguration(
+            provider: .iFlytek,
+            endpoint: configuration.endpoint,
+            apiKey: "app-id#api-secret#api-key",
+            model: "niutrans",
+            systemPrompt: "",
+            region: ""
+        )
+        let result = try await client.translate(
+            text: "hello",
+            targetLanguageIdentifier: "zh-Hans",
+            configuration: configuration
+        )
+
+        XCTAssertEqual(result.translatedText, "讯飞译文")
+        XCTAssertEqual(result.sourceLanguageIdentifier, "en")
     }
 
     func testServerErrorUsesProviderMessage() async {

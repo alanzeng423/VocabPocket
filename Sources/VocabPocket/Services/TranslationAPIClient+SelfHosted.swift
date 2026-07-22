@@ -35,7 +35,7 @@ extension TranslationAPIClient {
         request.httpBody = try JSONSerialization.data(withJSONObject: [
             "text": text,
             "source_lang": "auto",
-            "target_lang": deepLCode(for: target),
+            "target_lang": target == "en" ? "EN" : deepLCode(for: target),
         ])
 
         let data = try await send(request)

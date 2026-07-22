@@ -148,10 +148,11 @@ extension TranslationAPIClient {
         configuration: TranslationProviderConfiguration
     ) async throws -> ProviderTranslationResult {
         let url = try endpointURL(configuration.endpoint)
-        let source = baseLanguageCode(detectedLanguageIdentifier(for: text))
+        let detected = baseLanguageCode(detectedLanguageIdentifier(for: text))
+        let source = detected == "und" ? "auto" : detected
         var request = baseRequest(url: url)
         request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "source_language": source == "und" ? "" : source,
+            "source_language": detected == "und" ? "" : detected,
             "target_language": baseLanguageCode(target),
             "text": text,
         ])
@@ -171,14 +172,16 @@ extension TranslationAPIClient {
         configuration: TranslationProviderConfiguration
     ) async throws -> ProviderTranslationResult {
         let url = try endpointURL(configuration.endpoint)
-        let source = baseLanguageCode(detectedLanguageIdentifier(for: text))
+        let detected = baseLanguageCode(detectedLanguageIdentifier(for: text))
+        let source = detected == "und" ? "auto" : detected
         var request = baseRequest(url: url)
         request.setValue(Self.browserUserAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("https://transmart.qq.com/zh-CN/index", forHTTPHeaderField: "Referer")
         request.httpBody = try JSONSerialization.data(withJSONObject: [
             "header": [
                 "fn": "auto_translation",
-                "client_key": "vocabpocket-macos-\(UUID().uuidString.lowercased())",
+                "client_key":
+                    "browser-chrome-127.0.0-Mac OS-\(UUID().uuidString.lowercased())-\(Int(Date().timeIntervalSince1970 * 1_000))",
             ],
             "type": "plain",
             "model_category": "normal",
