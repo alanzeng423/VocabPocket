@@ -30,7 +30,7 @@ final class TranslationAPIClientTests: XCTestCase {
             let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
             XCTAssertEqual(json["target_lang"] as? String, "ZH-HANS")
             XCTAssertEqual(json["text"] as? [String], ["hello"])
-            return Self.response(
+            return try Self.response(
                 for: request,
                 json: #"{"translations":[{"detected_source_language":"EN","text":"你好"}]}"#
             )
@@ -54,7 +54,7 @@ final class TranslationAPIClientTests: XCTestCase {
             let body = try XCTUnwrap(request.httpBody)
             let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
             XCTAssertEqual(json["target"] as? String, "zh-TW")
-            return Self.response(
+            return try Self.response(
                 for: request,
                 json: #"{"data":{"translations":[{"translatedText":"Tom &amp; Jerry","detectedSourceLanguage":"en"}]}}"#
             )
@@ -77,7 +77,7 @@ final class TranslationAPIClientTests: XCTestCase {
                 URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
             XCTAssertEqual(components.queryItems?.first(where: { $0.name == "api-version" })?.value, "3.0")
             XCTAssertEqual(components.queryItems?.first(where: { $0.name == "to" })?.value, "ja")
-            return Self.response(
+            return try Self.response(
                 for: request,
                 json: #"[{"detectedLanguage":{"language":"en"},"translations":[{"text":"こんにちは","to":"ja"}]}]"#
             )
@@ -111,7 +111,7 @@ final class TranslationAPIClientTests: XCTestCase {
             XCTAssertEqual(json["model"] as? String, "local-model")
             let messages = try XCTUnwrap(json["messages"] as? [[String: Any]])
             XCTAssertTrue((messages.first?["content"] as? String)?.contains("简体中文") == true)
-            return Self.response(
+            return try Self.response(
                 for: request,
                 json: #"{"choices":[{"message":{"content":"本地译文"}}]}"#
             )
@@ -138,7 +138,7 @@ final class TranslationAPIClientTests: XCTestCase {
         MockURLProtocol.requestHandler = { request in
             XCTAssertEqual(request.value(forHTTPHeaderField: "x-api-key"), "secret")
             XCTAssertEqual(request.value(forHTTPHeaderField: "anthropic-version"), "2023-06-01")
-            return Self.response(
+            return try Self.response(
                 for: request,
                 json: #"{"content":[{"type":"text","text":"Claude 译文"}]}"#
             )
