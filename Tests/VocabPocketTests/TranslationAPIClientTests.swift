@@ -26,7 +26,7 @@ final class TranslationAPIClientTests: XCTestCase {
     func testDeepLUsesAuthorizationHeaderAndLanguageMapping() async throws {
         MockURLProtocol.requestHandler = { request in
             XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "DeepL-Auth-Key secret")
-            let body = try XCTUnwrap(request.httpBody)
+            let body = try Self.bodyData(from: request)
             let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
             XCTAssertEqual(json["target_lang"] as? String, "ZH-HANS")
             XCTAssertEqual(json["text"] as? [String], ["hello"])
@@ -51,7 +51,7 @@ final class TranslationAPIClientTests: XCTestCase {
             let components = try XCTUnwrap(
                 URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
             XCTAssertEqual(components.queryItems?.first(where: { $0.name == "key" })?.value, "secret")
-            let body = try XCTUnwrap(request.httpBody)
+            let body = try Self.bodyData(from: request)
             let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
             XCTAssertEqual(json["target"] as? String, "zh-TW")
             return try Self.response(
@@ -106,7 +106,7 @@ final class TranslationAPIClientTests: XCTestCase {
         MockURLProtocol.requestHandler = { request in
             XCTAssertEqual(request.url?.path, "/v1/chat/completions")
             XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
-            let body = try XCTUnwrap(request.httpBody)
+            let body = try Self.bodyData(from: request)
             let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
             XCTAssertEqual(json["model"] as? String, "local-model")
             let messages = try XCTUnwrap(json["messages"] as? [[String: Any]])
@@ -206,6 +206,25 @@ final class TranslationAPIClientTests: XCTestCase {
             )
         )
         return (response, Data(json.utf8))
+    }
+
+    private static func bodyData(from request: URLRequest) throws -> Data {
+        if let body = request.httpBody { return body }
+        let stream = try XCTUnwrap(request.httpBodyStream)
+        stream.open()
+        defer { stream.close() }
+
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4_096)
+        while true {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            if count == 0 { break }
+            if count < 0 {
+                throw stream.streamError ?? URLError(.cannotDecodeRawData)
+            }
+            data.append(contentsOf: buffer.prefix(count))
+        }
+        return data
     }
 }
 
