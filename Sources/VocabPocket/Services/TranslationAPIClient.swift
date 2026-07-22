@@ -27,7 +27,7 @@ enum TranslationProviderError: LocalizedError, Equatable {
 }
 
 final class TranslationAPIClient: @unchecked Sendable {
-    private let session: URLSession
+    let session: URLSession
 
     init(session: URLSession = .shared) {
         self.session = session
@@ -69,6 +69,31 @@ final class TranslationAPIClient: @unchecked Sendable {
             )
         case .anthropic:
             return try await translateWithAnthropic(
+                text: text,
+                target: targetLanguageIdentifier,
+                configuration: configuration
+            )
+        case .googleFree, .bingFree, .youdaoFree, .volcanoWeb, .tencentTransmart:
+            return try await translateWithFreeProvider(
+                text: text,
+                target: targetLanguageIdentifier,
+                configuration: configuration
+            )
+        case .deepLX, .libreTranslate, .mTranServer, .nllb:
+            return try await translateWithSelfHostedProvider(
+                text: text,
+                target: targetLanguageIdentifier,
+                configuration: configuration
+            )
+        case .azureOpenAI, .gemini, .qwenMT:
+            return try await translateWithAdditionalLLM(
+                text: text,
+                target: targetLanguageIdentifier,
+                configuration: configuration
+            )
+        case .baidu, .baiduField, .youdaoCloud, .youdaoLLM, .niuTrans, .caiyun,
+            .aliyun, .tencentCloud, .volcanoEngine, .iFlytek, .openL:
+            return try await translateWithCloudProvider(
                 text: text,
                 target: targetLanguageIdentifier,
                 configuration: configuration
@@ -234,7 +259,7 @@ final class TranslationAPIClient: @unchecked Sendable {
         return try result(text: translated, source: "und", target: target)
     }
 
-    private func validate(_ configuration: TranslationProviderConfiguration) throws {
+    func validate(_ configuration: TranslationProviderConfiguration) throws {
         guard configuration.provider != .apple else {
             throw TranslationProviderError.unsupportedProvider
         }
@@ -244,14 +269,14 @@ final class TranslationAPIClient: @unchecked Sendable {
         {
             throw TranslationProviderError.missingAPIKey(configuration.provider.title)
         }
-        if configuration.provider.isLLM,
+        if configuration.provider.requiresModel,
             configuration.model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         {
             throw TranslationProviderError.missingModel(configuration.provider.title)
         }
     }
 
-    private func baseRequest(url: URL) -> URLRequest {
+    func baseRequest(url: URL) -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.timeoutInterval = 45
@@ -260,7 +285,7 @@ final class TranslationAPIClient: @unchecked Sendable {
         return request
     }
 
-    private func send(_ request: URLRequest) async throws -> Data {
+    func send(_ request: URLRequest) async throws -> Data {
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse else {
             throw TranslationProviderError.invalidResponse("不是 HTTP 响应")
@@ -274,7 +299,7 @@ final class TranslationAPIClient: @unchecked Sendable {
         return data
     }
 
-    private func endpointURL(
+    func endpointURL(
         _ value: String,
         appendingIfNeeded components: [String] = [],
         acceptedSuffix: String? = nil
@@ -310,7 +335,7 @@ final class TranslationAPIClient: @unchecked Sendable {
         return url
     }
 
-    private func result(text: String, source: String, target: String) throws -> ProviderTranslationResult {
+    func result(text: String, source: String, target: String) throws -> ProviderTranslationResult {
         let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty else {
             throw TranslationProviderError.invalidResponse("译文为空")
@@ -322,7 +347,7 @@ final class TranslationAPIClient: @unchecked Sendable {
         )
     }
 
-    private func prompt(_ configuration: TranslationProviderConfiguration, target: String) -> String {
+    func prompt(_ configuration: TranslationProviderConfiguration, target: String) -> String {
         let languageName = TargetLanguage(rawValue: target)?.title ?? target
         let value = configuration.systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let template = value.isEmpty ? TranslationProviderPreferences.defaultLLMPrompt : value
@@ -332,7 +357,7 @@ final class TranslationAPIClient: @unchecked Sendable {
             .replacingOccurrences(of: "{target_language_code}", with: target)
     }
 
-    private func deepLCode(for target: String) -> String {
+    func deepLCode(for target: String) -> String {
         switch target {
         case "zh-Hans": "ZH-HANS"
         case "zh-Hant": "ZH-HANT"
@@ -341,7 +366,7 @@ final class TranslationAPIClient: @unchecked Sendable {
         }
     }
 
-    private func googleCode(for target: String) -> String {
+    func googleCode(for target: String) -> String {
         switch target {
         case "zh-Hans": "zh-CN"
         case "zh-Hant": "zh-TW"
@@ -349,7 +374,7 @@ final class TranslationAPIClient: @unchecked Sendable {
         }
     }
 
-    private func microsoftCode(for target: String) -> String {
+    func microsoftCode(for target: String) -> String {
         switch target {
         case "zh-Hans": "zh-Hans"
         case "zh-Hant": "zh-Hant"
@@ -357,7 +382,7 @@ final class TranslationAPIClient: @unchecked Sendable {
         }
     }
 
-    private func decodeHTMLEntities(_ value: String) -> String {
+    func decodeHTMLEntities(_ value: String) -> String {
         value
             .replacingOccurrences(of: "&quot;", with: "\"")
             .replacingOccurrences(of: "&#39;", with: "'")
@@ -366,7 +391,7 @@ final class TranslationAPIClient: @unchecked Sendable {
             .replacingOccurrences(of: "&amp;", with: "&")
     }
 
-    private func serverErrorMessage(from data: Data) -> String {
+    func serverErrorMessage(from data: Data) -> String {
         guard !data.isEmpty else { return "服务未返回错误详情" }
         if let object = try? JSONSerialization.jsonObject(with: data),
             let message = findMessage(in: object)
@@ -377,7 +402,7 @@ final class TranslationAPIClient: @unchecked Sendable {
         return String(text.trimmingCharacters(in: .whitespacesAndNewlines).prefix(500))
     }
 
-    private func findMessage(in value: Any) -> String? {
+    func findMessage(in value: Any) -> String? {
         if let dictionary = value as? [String: Any] {
             for key in ["message", "detail", "error_description"] {
                 if let message = dictionary[key] as? String, !message.isEmpty { return message }

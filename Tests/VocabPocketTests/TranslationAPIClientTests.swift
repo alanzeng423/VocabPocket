@@ -153,6 +153,233 @@ final class TranslationAPIClientTests: XCTestCase {
         XCTAssertEqual(result.translatedText, "Claude 译文")
     }
 
+    func testEveryRemoteProviderHasAValidDefaultEndpoint() throws {
+        XCTAssertEqual(TranslationProviderKind.allCases.count, 29)
+        for provider in TranslationProviderKind.allCases where provider.usesRemoteService {
+            let preferences = TranslationProviderPreferences.defaults(for: provider)
+            let url = try XCTUnwrap(URL(string: preferences.endpoint), provider.title)
+            XCTAssertNotNil(url.scheme, provider.title)
+            XCTAssertNotNil(url.host, provider.title)
+            if provider.requiresModel {
+                XCTAssertFalse(preferences.model.isEmpty, provider.title)
+            }
+        }
+    }
+
+    func testGoogleFreeParsesSegmentedResponse() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let components = try XCTUnwrap(
+                URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false))
+            XCTAssertEqual(components.queryItems?.first(where: { $0.name == "client" })?.value, "gtx")
+            XCTAssertEqual(components.queryItems?.first(where: { $0.name == "sl" })?.value, "auto")
+            XCTAssertEqual(components.queryItems?.first(where: { $0.name == "tl" })?.value, "zh-CN")
+            return try Self.response(
+                for: request,
+                json: #"[[["你","you",null,null],["好","good",null,null]],null,"en"]"#
+            )
+        }
+
+        let result = try await client.translate(
+            text: "you good",
+            targetLanguageIdentifier: "zh-Hans",
+            configuration: configuration(provider: .googleFree)
+        )
+
+        XCTAssertEqual(result.translatedText, "你好")
+        XCTAssertEqual(result.sourceLanguageIdentifier, "en")
+    }
+
+    func testLibreTranslateAppendsPathAndAllowsOptionalKey() async throws {
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.url?.path, "/translate")
+            let body = try Self.bodyData(from: request)
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            XCTAssertEqual(json["source"] as? String, "auto")
+            XCTAssertEqual(json["target"] as? String, "ja")
+            XCTAssertEqual(json["api_key"] as? String, "secret")
+            return try Self.response(
+                for: request,
+                json: #"{"translatedText":"こんにちは","detectedLanguage":{"language":"en"}}"#
+            )
+        }
+
+        var configuration = configuration(provider: .libreTranslate)
+        configuration = TranslationProviderConfiguration(
+            provider: .libreTranslate,
+            endpoint: "http://localhost:5000",
+            apiKey: "secret",
+            model: configuration.model,
+            systemPrompt: configuration.systemPrompt,
+            region: configuration.region
+        )
+        let result = try await client.translate(
+            text: "hello",
+            targetLanguageIdentifier: "ja",
+            configuration: configuration
+        )
+
+        XCTAssertEqual(result.translatedText, "こんにちは")
+        XCTAssertEqual(result.sourceLanguageIdentifier, "en")
+    }
+
+    func testGeminiBuildsGenerateContentRequest() async throws {
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.url?.path, "/v1beta/models/gemini-test:generateContent")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "x-goog-api-key"), "secret")
+            let body = try Self.bodyData(from: request)
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            XCTAssertNotNil(json["system_instruction"])
+            return try Self.response(
+                for: request,
+                json: #"{"candidates":[{"content":{"parts":[{"text":"Gemini 译文"}]}}]}"#
+            )
+        }
+
+        let configuration = TranslationProviderConfiguration(
+            provider: .gemini,
+            endpoint: "https://generativelanguage.googleapis.com/v1beta",
+            apiKey: "secret",
+            model: "gemini-test",
+            systemPrompt: TranslationProviderPreferences.defaultLLMPrompt,
+            region: ""
+        )
+        let result = try await client.translate(
+            text: "hello",
+            targetLanguageIdentifier: "zh-Hans",
+            configuration: configuration
+        )
+
+        XCTAssertEqual(result.translatedText, "Gemini 译文")
+    }
+
+    func testQwenMTSendsTranslationOptions() async throws {
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer secret")
+            let body = try Self.bodyData(from: request)
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            let options = try XCTUnwrap(json["translation_options"] as? [String: Any])
+            XCTAssertEqual(options["source_lang"] as? String, "auto")
+            XCTAssertEqual(options["target_lang"] as? String, "Traditional Chinese")
+            XCTAssertEqual(options["domains"] as? String, "software")
+            return try Self.response(
+                for: request,
+                json: #"{"choices":[{"message":{"content":"千问译文"}}]}"#
+            )
+        }
+
+        let configuration = TranslationProviderConfiguration(
+            provider: .qwenMT,
+            endpoint: "https://dashscope.aliyuncs.com/compatible-mode",
+            apiKey: "secret",
+            model: "qwen-mt-plus",
+            systemPrompt: "software",
+            region: ""
+        )
+        let result = try await client.translate(
+            text: "hello",
+            targetLanguageIdentifier: "zh-Hant",
+            configuration: configuration
+        )
+
+        XCTAssertEqual(result.translatedText, "千问译文")
+    }
+
+    func testBaiduSignsFormRequest() async throws {
+        MockURLProtocol.requestHandler = { request in
+            let parameters = try Self.formParameters(from: request)
+            XCTAssertEqual(parameters["appid"], "app-id")
+            XCTAssertEqual(parameters["from"], "auto")
+            XCTAssertEqual(parameters["to"], "cht")
+            XCTAssertEqual(parameters["q"], "hello")
+            XCTAssertEqual(parameters["sign"]?.count, 32)
+            return try Self.response(
+                for: request,
+                json: #"{"from":"en","to":"cht","trans_result":[{"src":"hello","dst":"您好"}]}"#
+            )
+        }
+
+        var configuration = configuration(provider: .baidu)
+        configuration = TranslationProviderConfiguration(
+            provider: .baidu,
+            endpoint: configuration.endpoint,
+            apiKey: "app-id#app-secret",
+            model: "",
+            systemPrompt: "",
+            region: ""
+        )
+        let result = try await client.translate(
+            text: "hello",
+            targetLanguageIdentifier: "zh-Hant",
+            configuration: configuration
+        )
+
+        XCTAssertEqual(result.translatedText, "您好")
+        XCTAssertEqual(result.sourceLanguageIdentifier, "en")
+    }
+
+    func testTencentCloudUsesV3SignatureHeaders() async throws {
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-TC-Action"), "TextTranslate")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-TC-Version"), "2018-03-21")
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-TC-Region"), "ap-shanghai")
+            XCTAssertTrue(
+                request.value(forHTTPHeaderField: "Authorization")?.hasPrefix("TC3-HMAC-SHA256 ") == true
+            )
+            return try Self.response(
+                for: request,
+                json: #"{"Response":{"TargetText":"腾讯译文","Source":"en","RequestId":"id"}}"#
+            )
+        }
+
+        var configuration = configuration(provider: .tencentCloud)
+        configuration = TranslationProviderConfiguration(
+            provider: .tencentCloud,
+            endpoint: configuration.endpoint,
+            apiKey: "secret-id#secret-key",
+            model: "",
+            systemPrompt: "0",
+            region: "ap-shanghai"
+        )
+        let result = try await client.translate(
+            text: "hello",
+            targetLanguageIdentifier: "zh-Hans",
+            configuration: configuration
+        )
+
+        XCTAssertEqual(result.translatedText, "腾讯译文")
+    }
+
+    func testVolcanoEngineUsesSignedRequest() async throws {
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertNotNil(request.value(forHTTPHeaderField: "X-Date"))
+            XCTAssertEqual(request.value(forHTTPHeaderField: "X-Content-Sha256")?.count, 64)
+            XCTAssertTrue(
+                request.value(forHTTPHeaderField: "Authorization")?.hasPrefix("HMAC-SHA256 ") == true
+            )
+            return try Self.response(
+                for: request,
+                json: #"{"Result":{"TranslationList":[{"DetectedSourceLanguage":"en","Translation":"火山译文"}]}}"#
+            )
+        }
+
+        var configuration = configuration(provider: .volcanoEngine)
+        configuration = TranslationProviderConfiguration(
+            provider: .volcanoEngine,
+            endpoint: configuration.endpoint,
+            apiKey: "access-key#secret-key",
+            model: "",
+            systemPrompt: "",
+            region: "cn-beijing"
+        )
+        let result = try await client.translate(
+            text: "hello",
+            targetLanguageIdentifier: "zh-Hans",
+            configuration: configuration
+        )
+
+        XCTAssertEqual(result.translatedText, "火山译文")
+    }
+
     func testServerErrorUsesProviderMessage() async {
         MockURLProtocol.requestHandler = { request in
             let url = try XCTUnwrap(request.url)
@@ -225,6 +452,15 @@ final class TranslationAPIClientTests: XCTestCase {
             data.append(contentsOf: buffer.prefix(count))
         }
         return data
+    }
+
+    private static func formParameters(from request: URLRequest) throws -> [String: String] {
+        let body = try bodyData(from: request)
+        let value = try XCTUnwrap(String(data: body, encoding: .utf8))
+        let components = try XCTUnwrap(URLComponents(string: "https://example.invalid/?\(value)"))
+        return Dictionary(
+            uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") }
+        )
     }
 }
 

@@ -42,14 +42,24 @@ struct SettingsView: View {
 
             Section("翻译引擎") {
                 Picker("Provider", selection: $settings.translationProvider) {
-                    ForEach(TranslationProviderKind.allCases) { provider in
-                        Text(provider.title).tag(provider)
+                    ForEach(TranslationProviderGroup.allCases) { group in
+                        Section(group.title) {
+                            ForEach(TranslationProviderKind.allCases.filter { $0.group == group }) { provider in
+                                Text(provider.title).tag(provider)
+                            }
+                        }
                     }
                 }
 
                 Text(settings.translationProvider.detail)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                if settings.translationProvider.isExperimental {
+                    Label("实验性网页接口不保证可用性，请勿依赖它处理重要内容。", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
 
                 if settings.translationProvider.usesRemoteService {
                     providerConfiguration
@@ -119,58 +129,73 @@ struct SettingsView: View {
         TextField("接口地址", text: preferenceBinding(\.endpoint, provider: provider))
             .textFieldStyle(.roundedBorder)
 
-        if provider == .microsoft {
-            TextField("Azure Region（部分资源必填）", text: preferenceBinding(\.region, provider: provider))
+        if let regionLabel = provider.regionLabel {
+            TextField(regionLabel, text: preferenceBinding(\.region, provider: provider))
                 .textFieldStyle(.roundedBorder)
         }
 
-        if provider.isLLM {
-            TextField("模型名称", text: preferenceBinding(\.model, provider: provider))
+        if let modelLabel = provider.modelLabel {
+            TextField(modelLabel, text: preferenceBinding(\.model, provider: provider))
                 .textFieldStyle(.roundedBorder)
+        }
 
+        if let promptLabel = provider.promptLabel {
             VStack(alignment: .leading, spacing: 6) {
-                Text("系统提示词")
+                Text(promptLabel)
                     .font(.caption.weight(.semibold))
                 TextEditor(text: preferenceBinding(\.systemPrompt, provider: provider))
                     .font(.system(.caption, design: .monospaced))
-                    .frame(minHeight: 82)
+                    .frame(minHeight: provider.group == .llm ? 82 : 48)
                     .overlay {
                         RoundedRectangle(cornerRadius: 6)
                             .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
                     }
-                Text("可使用 {target_language} 和 {target_language_code} 占位符。")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                if provider == .openAICompatible || provider == .anthropic
+                    || provider == .azureOpenAI || provider == .gemini
+                {
+                    Text("可使用 {target_language} 和 {target_language_code} 占位符。")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
             }
         }
 
-        VStack(alignment: .leading, spacing: 7) {
-            SecureField(
-                provider == .openAICompatible ? "API Key（本地服务可留空）" : "API Key",
-                text: $apiKeyDraft
-            )
-            .textFieldStyle(.roundedBorder)
+        if provider.supportsCredential {
+            VStack(alignment: .leading, spacing: 7) {
+                SecureField(provider.credentialLabel, text: $apiKeyDraft)
+                    .textFieldStyle(.roundedBorder)
 
-            HStack(spacing: 10) {
-                Label(
-                    apiKeyStatus(provider),
-                    systemImage: settings.hasAPIKey(for: provider) ? "key.fill" : "key"
-                )
-                .font(.caption)
-                .foregroundStyle(settings.hasAPIKey(for: provider) ? .green : .secondary)
+                if let credentialHint = provider.credentialHint {
+                    Text(credentialHint)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
 
-                Spacer()
+                HStack(spacing: 10) {
+                    Label(
+                        apiKeyStatus(provider),
+                        systemImage: settings.hasAPIKey(for: provider) ? "key.fill" : "key"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(settings.hasAPIKey(for: provider) ? .green : .secondary)
 
-                if settings.hasAPIKey(for: provider) {
-                    Button("删除密钥", role: .destructive) {
-                        removeAPIKey(for: provider)
+                    Spacer()
+
+                    if settings.hasAPIKey(for: provider) {
+                        Button("删除密钥", role: .destructive) {
+                            removeAPIKey(for: provider)
+                        }
                     }
+                    Button("保存密钥") {
+                        saveAPIKey(for: provider)
+                    }
+                    .disabled(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-                Button("保存密钥") {
-                    saveAPIKey(for: provider)
-                }
-                .disabled(apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
+        } else {
+            Label("此 Provider 无需密钥", systemImage: "key.slash")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
 
         HStack {

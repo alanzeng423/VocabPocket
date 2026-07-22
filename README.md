@@ -6,16 +6,17 @@
 
 一款开源的 macOS 菜单栏快捷翻译工具：在任何应用中选中文字，按下全局快捷键即可翻译；遇到图片、PDF 扫描件或不可选文字时，可直接框选屏幕做 OCR。每次翻译都可以自动进入生词本，之后通过间隔复习再次巩固。
 
-> 当前阶段：`0.2.0` 预发布版。最低支持 macOS 15；Apple Translation 不需要 API Key，其他翻译引擎使用你自己的账号或本地模型。
+> 当前阶段：`0.3.0` 预发布版。最低支持 macOS 15；Apple Translation 不需要 API Key，其他翻译引擎可使用你自己的账号、本地模型或实验性免费接口。
 
 ## 功能
 
 - 全局快捷键，默认 `⌥⌘D`，支持三个预设快捷键
 - 智能取词：优先读取当前选中文字，失败后自动进入截图 OCR
 - 单独的截图 OCR 与手动输入入口
-- 可切换翻译引擎：Apple Translation、DeepL、Google Cloud Translation、Microsoft Translator
-- LLM 翻译：OpenAI 兼容 Chat Completions（含 Ollama / LM Studio）与 Anthropic Claude
-- API 端点、模型、Azure Region 和 LLM 系统提示词均可配置，并可在设置中测试连通性
+- 29 个可切换 Provider，覆盖 Apple、DeepL、Google、Microsoft、百度、有道、小牛、彩云、阿里云、腾讯云、火山、讯飞等
+- LLM 翻译：OpenAI 兼容 Chat Completions（含 Ollama / LM Studio）、Claude、Azure OpenAI、Gemini 与 Qwen-MT
+- 自托管翻译：DeepLX、LibreTranslate、MTranServer 与 NLLB
+- API 端点、模型、地域、领域和提示词均可配置，并可在设置中测试连通性
 - API Key 只保存在 macOS 钥匙串，不写入偏好文件或生词本
 - Vision 多阶段设备端 OCR：原图识别、放大/灰度/对比度增强重试、深色背景反相兜底
 - 临时截图识别后立即删除，只有 OCR 得到的文字才会交给选定翻译引擎
@@ -41,18 +42,21 @@ VocabPocket 没有后端服务，也不集成广告或统计 SDK。
 
 ## 翻译引擎配置
 
-在 macOS 的 VocabPocket 设置中选择 Provider：
+在 macOS 的 VocabPocket 设置中选择 Provider。列表按类型分组：
 
-| Provider | 需要配置 | 默认接口 |
-| --- | --- | --- |
-| Apple Translation | 无 | 设备端 |
-| DeepL | API Key；Free 用户保留默认地址，Pro 用户改为 `https://api.deepl.com/v2/translate` | DeepL Free |
-| Google Cloud Translation | API Key | Translation Basic v2 |
-| Microsoft Translator | API Key；部分 Azure 资源还需 Region | Translator v3 |
-| OpenAI 兼容 LLM | 接口地址、模型；云服务通常还需 API Key | OpenAI Chat Completions |
-| Anthropic Claude | API Key、模型 | Messages API |
+| 分组 | Provider |
+| --- | --- |
+| 设备端 | Apple Translation |
+| 官方翻译 API | DeepL、Google Cloud、Microsoft Translator、百度通用/领域、有道智云/翻译大模型、小牛、彩云、阿里云、腾讯云、火山引擎、讯飞、OpenL |
+| LLM | OpenAI 兼容、Anthropic Claude、Azure OpenAI、Google Gemini、Qwen-MT |
+| 自托管 | DeepLX、LibreTranslate、MTranServer、NLLB |
+| 免费网页接口（实验性） | Google Translate、Bing、有道、火山翻译、腾讯 Transmart |
 
-LLM 提示词支持 `{target_language}` 与 `{target_language_code}` 占位符。连接 Ollama 或 LM Studio 时，可把接口填写为例如 `http://localhost:11434/v1`，应用会自动补全 `/chat/completions`。
+完整的凭证格式、默认端点、可配置字段和稳定性说明见 [Provider 配置指南](docs/PROVIDERS.md)。
+
+LLM 提示词支持 `{target_language}` 与 `{target_language_code}` 占位符。连接 Ollama 或 LM Studio 时，可把接口填写为例如 `http://localhost:11434/v1`，应用会自动补全 `/chat/completions`。多段云端凭证会作为一个值保存在钥匙串，例如百度使用 `AppID#密钥`、讯飞使用 `AppID#APISecret#APIKey`。
+
+Provider 清单参考了 [windingwind/zotero-pdf-translate](https://github.com/windingwind/zotero-pdf-translate) 当前的句子翻译服务；网络协议和签名代码按照各 Provider 的官方文档独立实现。CNKI、海词依赖不稳定的私有网页协议或验证码，Pot 只把文字转发给另一款 App 且不返回译文，因此没有混入 VocabPocket 的自动保存流程。参考项目中的词典 Provider 也不属于句子翻译范围。
 
 ## 构建
 
@@ -129,4 +133,4 @@ Sources/VocabPocket/
 
 VocabPocket is an open-source macOS menu bar app for instant translation. Select text anywhere and press a global shortcut, or draw a screen region to OCR text from images. Translations can be saved locally and reviewed with a lightweight spaced-repetition flow.
 
-It requires macOS 15+, uses Vision for multi-pass on-device OCR, and supports Apple Translation, DeepL, Google Cloud, Microsoft Translator, OpenAI-compatible LLMs, and Anthropic Claude. API keys are stored in the macOS Keychain. The project is licensed under MIT.
+It requires macOS 15+, uses Vision for multi-pass on-device OCR, and offers 29 providers across official translation APIs, LLMs, self-hosted engines, and clearly marked experimental web endpoints. API keys are stored in the macOS Keychain. See [Provider configuration](docs/PROVIDERS.md). The project is licensed under MIT.
